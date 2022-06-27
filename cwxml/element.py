@@ -231,6 +231,31 @@ class ListProperty(ElementProperty, AbstractClass):
         return None
 
 
+# REMINDER: Is there a way of making ListProperty return an empty element when required? Like passing a True or False
+class ListPropertyRequired(ListProperty):
+    '''Same as ListProperty but returns an empty element rather than None when value is None or empty'''
+
+    def __init__(self, tag_name=None, value=None):
+        super().__init__(tag_name or type(self).tag_name, value or [])
+
+    def to_xml(self):
+        element = ET.Element(self.tag_name)
+
+        for child in vars(self).values():
+            if isinstance(child, AttributeProperty):
+                element.set(child.name, str(child.value))
+
+        if self.value and len(self.value) > 0:
+            for item in self.value:
+                if isinstance(item, self.list_type):
+                    element.append(item.to_xml())
+                else:
+                    raise TypeError(
+                        f"{type(self).__name__} can only hold objects of type '{self.list_type.__name__}', not '{type(item)}'")
+
+        return element
+
+
 class TextProperty(ElementProperty):
     value_types = (str)
 
@@ -248,6 +273,27 @@ class TextProperty(ElementProperty):
         result = ET.Element(self.tag_name)
         result.text = self.value
         return result
+
+
+# REMINDER: Is there a way of making TextProperty return an empty element when required? Like passing a True or False
+class TextPropertyRequired(ElementProperty):
+    '''Same as TextProperty but returns an empty element rather than None when value is None or empty'''
+    value_types = (str)
+
+    def __init__(self, tag_name: str = "Name", value=None):
+        super().__init__(tag_name, value or "")
+
+    @staticmethod
+    def from_xml(element: ET.Element):
+        return TextPropertyRequired(element.tag, element.text)
+
+    def to_xml(self):
+        element = ET.Element(self.tag_name)
+        if not self.value or len(self.value) < 1:
+            return element
+
+        element.text = self.value
+        return element
 
 
 class ColorProperty(ElementProperty):
@@ -307,6 +353,28 @@ class VectorProperty(ElementProperty):
         y = str(float32(self.value.y))
         z = str(float32(self.value.z))
         return ET.Element(self.tag_name, attrib={"x": x, "y": y, "z": z})
+
+
+class Vector4Property(ElementProperty):
+    value_types = (Vector)
+
+    def __init__(self, tag_name: str, value=None):
+        super().__init__(tag_name, value or Vector((0, 0, 0, 0)))
+
+    @ staticmethod
+    def from_xml(element: ET.Element):
+        if not all(x in element.attrib.keys() for x in ["x", "y", "z", "w"]):
+            return Vector4Property.read_value_error(element)
+
+        return Vector4Property(
+            element.tag, Vector((float(element.get("x")), float(element.get("y")), float(element.get("z")), float(element.get("w")))))
+
+    def to_xml(self):
+        x = str(float32(self.value.x))
+        y = str(float32(self.value.y))
+        z = str(float32(self.value.z))
+        w = str(float32(self.value.w))
+        return ET.Element(self.tag_name, attrib={"x": x, "y": y, "z": z, "w": w})
 
 
 class QuaternionProperty(ElementProperty):
