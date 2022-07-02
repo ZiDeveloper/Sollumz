@@ -39,6 +39,11 @@ def draw_ymap_properties(self, context):
         row = layout.row()
         row.prop(obj.ymap_properties.content_flags_toggle, "has_grass", toggle=1)
 
+def draw_ymap_model_properties(self, context):
+    obj = context.active_object
+    if obj and obj.sollum_type == SollumType.YMAP_MODEL_OCCLUDER:
+        layout = self.layout
+        layout.prop(obj.ymap_properties, 'flags')
 
 class OBJECT_PT_ymap_block(bpy.types.Panel):
     bl_label = "Block"
@@ -69,6 +74,8 @@ class OBJECT_PT_ymap_block(bpy.types.Panel):
 
 def register():
     SOLLUMZ_PT_OBJECT_PANEL.append(draw_ymap_properties)
+    SOLLUMZ_PT_OBJECT_PANEL.append(draw_ymap_model_properties)
 
 def unregister():
     SOLLUMZ_PT_OBJECT_PANEL.remove(draw_ymap_properties)
+    SOLLUMZ_PT_OBJECT_PANEL.remove(draw_ymap_model_properties)
