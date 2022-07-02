@@ -4,8 +4,9 @@ from struct import pack
 from ..cwxml.ymap import *
 from binascii import hexlify
 from mathutils import Vector
-from ..sollumz_properties import SollumType
 from ..tools.meshhelper import get_bound_extents
+from ..sollumz_properties import SOLLUMZ_UI_NAMES, SollumType
+from ..tools.utils import get_min_vector, get_max_vector
 
 
 def box_from_obj(obj):
@@ -54,12 +55,9 @@ def get_verts_from_obj(obj):
            verts += str(hexlify(pack('B', i)))[2:-1].upper()
     return verts
 
-def model_from_obj(obj, export_op):
-    if len(obj.data.vertices) > 256:
-        export_op.report({"ERROR"}, message=f"Object {obj.name} has too many vertices and will be skipped. Can not have more than 256.")
-        return None
-        
+def model_from_obj(obj, export_op):        
     triangulate_obj(obj)
+
     model = OccludeModelItem()
     model.bmin, model.bmax = get_bound_extents(obj)
     model.verts = get_verts_from_obj(obj)
@@ -71,31 +69,53 @@ def model_from_obj(obj, export_op):
 
     return model
 
+# TODO: This needs more work for non occluder object (entities )
+def calculate_extents(ymap, obj):
+    bbmin, bbmax = get_bound_extents(obj)
+
+    ymap.entities_extents_min = get_min_vector(ymap.entities_extents_min, bbmin)
+    ymap.entities_extents_max = get_max_vector(ymap.entities_extents_max , bbmax)
+    ymap.streaming_extents_min = get_min_vector(ymap.streaming_extents_min, bbmin)
+    ymap.streaming_extents_max = get_max_vector(ymap.streaming_extents_max, bbmax)
+
 def ymap_from_object(export_op, obj, exportpath, export_settings=None):
     ymap = CMapData()
+    max_int = (2**31)-1
+    ymap.entities_extents_min = Vector((max_int, max_int, max_int))
+    ymap.entities_extents_max = Vector((0, 0, 0))
+    ymap.streaming_extents_min = Vector((max_int, max_int, max_int))
+    ymap.streaming_extents_max = Vector((0, 0, 0))
 
     for child in obj.children:
         # TODO: entities
 
         if child.sollum_type == SollumType.YMAP_BOX_OCCLUDER_GROUP:
             obj.ymap_properties.content_flags_toggle.has_occl = True
+
             for box in child.children:
                 if box.sollum_type == SollumType.YMAP_BOX_OCCLUDER:
+                    
                     ymap.box_occluders.append(box_from_obj(box))
+                    calculate_extents(ymap, box)
                 else:
-                    # TODO: Warning, not an obj of type box_occl
-                    pass
+                    export_op.report({'WARNING'},
+                        f"Object {box.name} will be skipped because it is not a {SOLLUMZ_UI_NAMES[SollumType.YMAP_BOX_OCCLUDER]} type.")
 
         if child.sollum_type == SollumType.YMAP_MODEL_OCCLUDER_GROUP:
             obj.ymap_properties.content_flags_toggle.has_occl = True
+
             for model in child.children:
                 if model.sollum_type == SollumType.YMAP_MODEL_OCCLUDER:
-                    modelxml = model_from_obj(model, export_op)
-                    if modelxml:
-                        ymap.occlude_models.append(modelxml)
+                    if len(model.data.vertices) > 256:
+                        export_op.report({"ERROR"}, 
+                            message=f"Object {model.name} has too many vertices and will be skipped. It can not have more than 256 vertices.")
+                        continue
+                    
+                    ymap.occlude_models.append(model_from_obj(model, export_op))
+                    calculate_extents(ymap, model)
                 else:
-                    # TODO: Warning, not an obj of type model_occl
-                    pass
+                    export_op.report({'WARNING'},
+                        f"Object {model.name} will be skipped because it is not a {SOLLUMZ_UI_NAMES[SollumType.YMAP_MODEL_OCCLUDER]} type.")
 
         # TODO: physics_dictionaries
 
@@ -113,10 +133,6 @@ def ymap_from_object(export_op, obj, exportpath, export_settings=None):
     ymap.content_flags = obj.ymap_properties.content_flags
 
     # TODO: Calc extents
-    ymap.streaming_extents_min = Vector(obj.ymap_properties.streaming_extents_min)
-    ymap.streaming_extents_max = Vector(obj.ymap_properties.streaming_extents_max)
-    ymap.entities_extents_min = Vector(obj.ymap_properties.entities_extents_min)
-    ymap.entities_extents_max = Vector(obj.ymap_properties.entities_extents_max)
 
     ymap.block.version  = obj.ymap_properties.block.version 
     ymap.block.versiflagson  = obj.ymap_properties.block.flags
